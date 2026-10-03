@@ -73,6 +73,11 @@ def parse_args():
         help="Cloudflare Access Service Token Client Secret (選填)",
     )
     parser.add_argument(
+        "--simulation",
+        action="store_true",
+        help="使用模擬環境 (測試用)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="僅擷取並列印資料，不發送至 Worker",
@@ -91,14 +96,22 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
         )
         sys.exit(1)
 
-    print("[1/4] 初始化 Shioaji API 連線...")
-    api = sj.Shioaji()
+    print(f"[1/4] 初始化 Shioaji API 連線 (模擬環境: {args.simulation})...")
+    api = sj.Shioaji(simulation=args.simulation)
 
     print("[2/4] 登入永豐金 API...")
-    api.login(
-        api_key=args.api_key,
-        secret_key=args.secret_key,
-    )
+    try:
+        api.login(
+            api_key=args.api_key,
+            secret_key=args.secret_key,
+        )
+    except Exception as e:
+        err_msg = str(e)
+        if "doesn't have production permission" in err_msg:
+            print("\n❌ 登入失敗: 永豐金證券回報金鑰尚未具備正式環境權限 (Token doesn't have production permission)。", file=sys.stderr)
+            print("👉 請前往永豐金官網 API 管理頁面: https://www.sinotrade.com.tw/newweb/PythonAPIKey/", file=sys.stderr)
+            print("   確認該組 API Key 是否已勾選開通「正式環境 (Production)」、「行情/資料」、「帳務」等權限。\n", file=sys.stderr)
+        raise
 
     # 啟用交易憑證 (若有提供)
     if args.cert_path and args.cert_pass and args.person_id:
@@ -111,46 +124,70 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
 
     print("[3/4] 抓取台股持倉清單與損益試算...")
     positions: List[Dict[str, Any]] = []
+    total_market_value = 0.0
 
-    # 取得證券庫存
-    stock_positions = api.list_positions(api.stock_account)
+    # 取得所有證券帳號
+    stock_accounts = [
+        acc
+        for acc in api.list_accounts()
+        if hasattr(acc, "account_id")
+        and (
+            "Stock" in acc.__class__.__name__
+            or getattr(acc, "account_type", "") == "H"
+        )
+    ]
+    if not stock_accounts and api.stock_account:
+        stock_accounts = [api.stock_account]
 
     today_str = datetime.date.today().isoformat()
-    broker_account = getattr(api.stock_account, "account_id", "")
+    broker_account = (
+        getattr(api.stock_account, "account_id", "") if api.stock_account else ""
+    )
 
-    total_market_value = 0.0
-    for pos in stock_positions:
-        # Shioaji position 屬性解析
-        symbol = str(getattr(pos, "code", ""))
-        quantity = int(getattr(pos, "quantity", 0))
-        cost_price = float(getattr(pos, "price", 0.0))
-        last_price = float(getattr(pos, "last_price", 0.0) or cost_price)
-        market_val = float(getattr(pos, "market_value", 0.0) or (quantity * last_price))
-        unrealized = float(getattr(pos, "pnl", 0.0) or (market_val - (quantity * cost_price)))
+    for acc in stock_accounts:
+        acc_id = getattr(acc, "account_id", "")
+        broker_id = getattr(acc, "broker_id", "")
+        print(f"  -> 查詢證券帳號 [{broker_id}-{acc_id}] 部位...")
+        try:
+            stock_positions = api.list_positions(acc)
+        except Exception as e:
+            print(f"     查詢 [{broker_id}-{acc_id}] 部位跳過: {e}")
+            continue
 
-        # 判斷是否為 ETF 或一般股票
-        asset_type = "etf" if symbol.startswith("00") else "stock"
+        for pos in stock_positions:
+            symbol = str(getattr(pos, "code", ""))
+            quantity = int(getattr(pos, "quantity", 0))
+            cost_price = float(getattr(pos, "price", 0.0))
+            last_price = float(getattr(pos, "last_price", 0.0) or cost_price)
+            market_val = float(
+                getattr(pos, "market_value", 0.0) or (quantity * last_price)
+            )
+            unrealized = float(
+                getattr(pos, "pnl", 0.0) or (market_val - (quantity * cost_price))
+            )
 
-        # 嘗試從契約獲取名稱，若無則預設為代碼
-        name = symbol
-        contract = api.Contracts.Stocks.get(symbol)
-        if contract and hasattr(contract, "name"):
-            name = contract.name
+            # 判斷是否為 ETF 或一般股票
+            asset_type = "etf" if symbol.startswith("00") else "stock"
 
-        positions.append(
-            {
-                "symbol": symbol,
-                "name": name,
-                "quantity": quantity,
-                "marketValue": round(market_val),
-                "costPrice": round(cost_price, 2),
-                "currentPrice": round(last_price, 2),
-                "unrealizedProfit": round(unrealized),
-                "assetType": asset_type,
-                "currency": "TWD",
-            }
-        )
-        total_market_value += market_val
+            name = symbol
+            contract = api.Contracts.Stocks.get(symbol)
+            if contract and hasattr(contract, "name"):
+                name = contract.name
+
+            positions.append(
+                {
+                    "symbol": symbol,
+                    "name": name,
+                    "quantity": quantity,
+                    "marketValue": round(market_val),
+                    "costPrice": round(cost_price, 2),
+                    "currentPrice": round(last_price, 2),
+                    "unrealizedProfit": round(unrealized),
+                    "assetType": asset_type,
+                    "currency": "TWD",
+                }
+            )
+            total_market_value += market_val
 
     # 嘗試抓取銀行餘額 (若支援)
     cash_balance = None
