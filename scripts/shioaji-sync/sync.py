@@ -126,84 +126,151 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
             person_id=args.person_id,
         )
 
-    print("[3/4] 抓取台股持倉清單與損益試算...")
+    print("[3/4] 抓取所有證券與期貨帳號持倉與權益數...")
     positions: List[Dict[str, Any]] = []
     total_market_value = 0.0
 
-    # 取得所有證券帳號
+    all_accounts = api.list_accounts()
+    print(f"  -> 共偵測到 {len(all_accounts)} 個永豐金帳戶")
+
+    def get_acc_type(a) -> str:
+        t = getattr(a, "account_type", "")
+        val = getattr(t, "value", None)
+        return str(val if val is not None else t)
+
     stock_accounts = [
         acc
-        for acc in api.list_accounts()
-        if hasattr(acc, "account_id")
-        and (
-            "Stock" in acc.__class__.__name__
-            or getattr(acc, "account_type", "") == "H"
-        )
+        for acc in all_accounts
+        if get_acc_type(acc) in ["S", "H"]
+        or "Stock" in acc.__class__.__name__
     ]
-    if not stock_accounts and api.stock_account:
-        stock_accounts = [api.stock_account]
+    futures_accounts = [
+        acc
+        for acc in all_accounts
+        if get_acc_type(acc) == "F"
+        or "Future" in acc.__class__.__name__
+    ]
 
     today_str = datetime.date.today().isoformat()
-    broker_account = (
-        getattr(api.stock_account, "account_id", "") if api.stock_account else ""
-    )
+    broker_accounts = [
+        f"{getattr(acc, 'broker_id', '')}-{getattr(acc, 'account_id', '')}"
+        for acc in all_accounts
+    ]
+
+    # 1. 抓取所有證券持倉
+    raw_positions = []
+    symbols_to_fetch = set()
 
     for acc in stock_accounts:
         acc_id = getattr(acc, "account_id", "")
         broker_id = getattr(acc, "broker_id", "")
-        print(f"  -> 查詢證券帳號 [{broker_id}-{acc_id}] 部位...")
+        acc_label = f"{broker_id}-{acc_id}"
+        print(f"  -> 查詢證券帳號 [{acc_label}] 部位...")
         try:
-            # 優先使用股數 (Share) 作為單位，確保整股與零股皆以實際股數精確計算市值
             unit_param = getattr(getattr(sj, "Unit", None), "Share", None)
             if unit_param:
-                stock_positions = api.list_positions(acc, unit=unit_param)
+                sp = api.list_positions(acc, unit=unit_param)
             else:
-                stock_positions = api.list_positions(acc)
+                sp = api.list_positions(acc)
         except Exception as e:
-            print(f"     查詢 [{broker_id}-{acc_id}] 部位跳過: {e}")
+            print(f"     查詢 [{acc_label}] 部位失敗或跳過: {e}")
             continue
 
-        for pos in stock_positions:
-            symbol = str(getattr(pos, "code", ""))
-            quantity = int(getattr(pos, "quantity", 0))
-            cost_price = float(getattr(pos, "price", 0.0))
-            last_price = float(getattr(pos, "last_price", 0.0) or cost_price)
-            market_val = float(
-                getattr(pos, "market_value", 0.0) or (quantity * last_price)
-            )
-            unrealized = float(
-                getattr(pos, "pnl", 0.0) or (market_val - (quantity * cost_price))
-            )
+        print(f"     [{acc_label}] 取得 {len(sp)} 筆部位")
+        for pos in sp:
+            sym = str(getattr(pos, "code", ""))
+            if sym:
+                symbols_to_fetch.add(sym)
+                raw_positions.append((acc_label, pos))
 
-            # 判斷是否為 ETF 或一般股票
-            asset_type = "etf" if symbol.startswith("00") else "stock"
+    # 批次查詢股票中文名稱 (透過 TWSE/TPEX 官方行情 API)
+    stock_names: Dict[str, str] = {}
+    if symbols_to_fetch:
+        try:
+            query_items = []
+            for sym in symbols_to_fetch:
+                query_items.append(f"tse_{sym}.tw")
+                query_items.append(f"otc_{sym}.tw")
+            chunk_size = 50
+            for i in range(0, len(query_items), chunk_size):
+                chunk = "|".join(query_items[i : i + chunk_size])
+                url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={chunk}"
+                r = requests.get(url, timeout=5)
+                if r.status_code == 200:
+                    for item in r.json().get("msgArray", []):
+                        c = item.get("c")
+                        n = item.get("n")
+                        if c and n:
+                            stock_names[c] = n
+        except Exception as e:
+            print(f"  -> 股票名稱對照查詢提示: {e}")
 
-            name = symbol
-            try:
-                stocks = getattr(api, "contracts", None) or getattr(api, "Contracts", None)
-                if stocks and hasattr(stocks, "Stocks"):
-                    contract = stocks.Stocks.get(symbol)
-                    if contract and hasattr(contract, "name") and contract.name:
-                        name = contract.name
-            except Exception:
-                pass
+    for acc_label, pos in raw_positions:
+        symbol = str(getattr(pos, "code", ""))
+        quantity = int(getattr(pos, "quantity", 0))
+        cost_price = float(getattr(pos, "price", 0.0))
+        last_price = float(getattr(pos, "last_price", 0.0) or cost_price)
+        market_val = float(
+            getattr(pos, "market_value", 0.0) or (quantity * last_price)
+        )
+        unrealized = float(
+            getattr(pos, "pnl", 0.0) or (market_val - (quantity * cost_price))
+        )
 
-            positions.append(
-                {
-                    "symbol": symbol,
-                    "name": name,
-                    "quantity": quantity,
-                    "marketValue": round(market_val),
-                    "costPrice": round(cost_price, 2),
-                    "currentPrice": round(last_price, 2),
-                    "unrealizedProfit": round(unrealized),
-                    "assetType": asset_type,
-                    "currency": "TWD",
-                }
-            )
-            total_market_value += market_val
+        asset_type = "etf" if symbol.startswith("00") else "stock"
+        name = stock_names.get(symbol, symbol)
 
-    # 嘗試抓取銀行餘額 (若支援)
+        positions.append(
+            {
+                "symbol": symbol,
+                "name": name,
+                "quantity": quantity,
+                "marketValue": round(market_val),
+                "costPrice": round(cost_price, 2),
+                "currentPrice": round(last_price, 2),
+                "unrealizedProfit": round(unrealized),
+                "assetType": asset_type,
+                "currency": "TWD",
+            }
+        )
+        total_market_value += market_val
+
+    # 2. 抓取期貨帳號權益數與保證金
+    futures_equity_total = 0.0
+    for acc in futures_accounts:
+        acc_id = getattr(acc, "account_id", "")
+        broker_id = getattr(acc, "broker_id", "")
+        acc_label = f"{broker_id}-{acc_id}"
+        print(f"  -> 查詢期貨帳號 [{acc_label}] 權益數與保證金...")
+        try:
+            m = api.margin(acc)
+            equity = float(getattr(m, "equity", 0.0))
+            avail = float(getattr(m, "available_margin", 0.0))
+            if equity > 0 or avail > 0:
+                print(f"     ✅ [{acc_label}] 權益數: NT$ {int(equity):,}, 可用保證金: NT$ {int(avail):,}")
+                positions.append(
+                    {
+                        "symbol": f"FUT-{acc_id}",
+                        "name": f"永豐期貨-權益數 ({acc_id})",
+                        "quantity": 1,
+                        "marketValue": round(equity),
+                        "costPrice": round(equity, 2),
+                        "currentPrice": round(equity, 2),
+                        "unrealizedProfit": 0,
+                        "assetType": "fund",
+                        "currency": "TWD",
+                    }
+                )
+                total_market_value += equity
+                futures_equity_total += equity
+        except Exception as e:
+            err_msg = str(e)
+            if "Please check param" in err_msg or "cannot find WebID" in err_msg:
+                print(f"     ℹ️ 期貨帳號 [{acc_label}] 暫無法讀取權益數 (永豐金期貨 API 路由未配置): {err_msg}")
+            else:
+                print(f"     查詢期貨帳號 [{acc_label}] 跳過: {err_msg}")
+
+    # 嘗試抓取銀行交割戶餘額 (若支援)
     cash_balance = None
     try:
         balance_info = api.account_balance()
@@ -212,8 +279,11 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
     except Exception:
         pass
 
+    if futures_equity_total > 0:
+        cash_balance = (cash_balance or 0.0) + futures_equity_total
+
     account_info = {
-        "brokerAccount": broker_account,
+        "brokerAccount": ", ".join(broker_accounts) if broker_accounts else "sinopac-all",
     }
     if cash_balance is not None:
         account_info["cashBalance"] = round(cash_balance)
@@ -224,7 +294,7 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
         "account": account_info,
     }
 
-    print(f"  -> 成功取得 {len(positions)} 檔股票庫存，預估總市值: NT$ {int(total_market_value):,}")
+    print(f"  -> 成功彙整 {len(positions)} 檔部位（含所有證券帳號庫存與期貨權益數），總市值: NT$ {int(total_market_value):,}")
     return payload
 
 
