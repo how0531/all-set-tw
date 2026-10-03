@@ -10,6 +10,8 @@ import {
   InvalidConnectorConfigError,
   updateConnectorSettings,
 } from "./service";
+import { shioajiPushPayloadSchema } from "../../sources/sinopac-securities/protocol";
+import { handleShioajiPush } from "../../sources/sinopac-securities/sync";
 
 const settingsBodySchema = z.object({
   config: z.record(z.string(), z.unknown()),
@@ -73,4 +75,15 @@ function registerConnectorSettingsRoutes(api: Hono<AppBindings>) {
       }
     },
   );
+
+  api.post("/connectors/sinopac_securities/push", async (c) => {
+    const authHeader =
+      c.req.header("Authorization") ||
+      c.req.header("X-Sync-Token") ||
+      c.req.header("X-Secret-Key");
+    const rawBody = await c.req.json();
+    const payload = shioajiPushPayloadSchema.parse(rawBody);
+    const result = await handleShioajiPush(c.env, payload, authHeader);
+    return c.json({ success: true, data: result });
+  });
 }

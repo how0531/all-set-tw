@@ -39,6 +39,7 @@
 | 樂天國際銀行 | 臺幣活存帳戶、每日餘額與交易明細                                                                      | 網銀登入；AI 自動辨識驗證碼  |
 | 兆豐銀行     | 存款帳戶、餘額與交易；信用卡帳單與消費                                                                | App 登入；AI 自動辨識驗證碼  |
 | 將來銀行     | 主帳戶與活存口袋餘額、交易；定存口袋餘額                                                              | 網銀登入；AI 自動辨識驗證碼  |
+| 永豐金證券   | 股票、ETF 持倉、庫存損益與交割銀行餘額                                                                | Python Shioaji API 本地推送  |
 
 ## 使用限制
 
@@ -57,7 +58,7 @@
 
 點擊下方按鈕。Cloudflare 會在你的 GitHub 帳號建立新的 repository、自動建立 D1 Database，並部署至 Cloudflare Workers：
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/TedLin1993/all-set-tw)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/how0531/all-set-tw)
 
 首次使用時，依畫面透過 **Git account → New Github Connection → Install & Authorize** 授權 Cloudflare 存取 GitHub。
 

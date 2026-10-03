@@ -29,9 +29,21 @@ function requireAccessSecrets(
   }
 }
 
+export function isPushWebhookRequest(request: Request) {
+  const pathname = new URL(request.url).pathname;
+  return (
+    request.method === "POST" &&
+    pathname.endsWith("/connectors/sinopac_securities/push")
+  );
+}
+
 export const accessMiddleware = honoFactory.createMiddleware(
   async (c, next) => {
-    if (isDemoMode(c.env) || isLocalDevRequest(c.req.raw, c.env)) {
+    if (
+      isDemoMode(c.env) ||
+      isLocalDevRequest(c.req.raw, c.env) ||
+      isPushWebhookRequest(c.req.raw)
+    ) {
       await next();
       return;
     }

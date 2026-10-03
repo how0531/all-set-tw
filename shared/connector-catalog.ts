@@ -390,6 +390,24 @@ export const connectorCatalog = {
       "deviceSeed",
     ],
   },
+  sinopac_securities: {
+    id: "sinopac_securities",
+    title: "永豐金證券 (Shioaji)",
+    description:
+      "股票、ETF 持倉、庫存損益與成交明細（透過 Shioaji Python 推送）",
+    connectionMode: "api_credentials",
+    scopes: ["all", "investments"],
+    capabilities: [
+      "investment_position",
+      "investment_transaction",
+      "bank_account",
+      "bank_balance_snapshot",
+    ],
+    publicFields: [],
+    credentialFields: ["apiKey", "secretKey"],
+    secretStateFields: ["lastPushedAt", "pushedItemsCount"],
+    resetOnCredentialChangeFields: [],
+  },
 } as const satisfies Record<string, ConnectorCatalogEntry>;
 
 export type ConnectorId = keyof typeof connectorCatalog;

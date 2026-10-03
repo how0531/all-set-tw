@@ -94,4 +94,8 @@ export const connectorFields = {
     { key: "account", label: "使用者代號", type: "text" },
     { key: "password", label: "行動銀行登入密碼", type: "password" },
   ],
+  sinopac_securities: [
+    { key: "apiKey", label: "永豐金證券 API Key", type: "text" },
+    { key: "secretKey", label: "永豐金證券 Secret Key", type: "password" },
+  ],
 } satisfies ConnectorFieldMap;

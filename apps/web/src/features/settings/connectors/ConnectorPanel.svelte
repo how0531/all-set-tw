@@ -7,6 +7,7 @@
     useQueryClient,
   } from "@tanstack/svelte-query";
   import {
+    ExternalLink,
     KeyRound,
     Mail,
     RefreshCw,
@@ -1364,6 +1365,34 @@
     </div>
     <form autocomplete="off" onsubmit={(event) => event.preventDefault()}>
       <div class="grid gap-3 p-4">
+        {#if connectorId === "sinopac_securities"}
+          <div
+            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-steel/20 bg-steel/[0.04] p-3 text-sm"
+          >
+            <div class="space-y-0.5">
+              <span class="font-medium text-ink">永豐金證券 Python API Key</span
+              >
+              <p class="text-xs text-muted-foreground">
+                尚未取得金鑰？可前往永豐金官方頁面線上簽署並免費申請。
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              class="gap-1.5 shrink-0"
+              onclick={() =>
+                window.open(
+                  "https://www.sinotrade.com.tw/newweb/PythonAPIKey/",
+                  "_blank",
+                  "noopener,noreferrer",
+                )}
+            >
+              <ExternalLink class="size-4" />
+              前往申請 API Key
+            </Button>
+          </div>
+        {/if}
         {#each fields as field (field.key)}
           {@const storedCredential = Boolean(
             $settings.data?.configured &&
@@ -1436,18 +1465,37 @@
                 : "連線並取得驗證碼"}</Button
           >
         {:else}
-          <Button
-            size="sm"
-            disabled={$save.isPending}
-            onclick={() => {
-              error = "";
-              $save.reset();
-              $save.mutate(buildConfig());
-            }}
-            ><Save class="size-4" />{$save.isPending
-              ? "儲存中…"
-              : "儲存憑證"}</Button
-          >
+          <div class="flex flex-wrap items-center gap-2">
+            {#if connectorId === "sinopac_securities"}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                class="gap-1.5"
+                onclick={() =>
+                  window.open(
+                    "https://www.sinotrade.com.tw/newweb/PythonAPIKey/",
+                    "_blank",
+                    "noopener,noreferrer",
+                  )}
+              >
+                <ExternalLink class="size-4" />
+                申請 API Key
+              </Button>
+            {/if}
+            <Button
+              size="sm"
+              disabled={$save.isPending}
+              onclick={() => {
+                error = "";
+                $save.reset();
+                $save.mutate(buildConfig());
+              }}
+              ><Save class="size-4" />{$save.isPending
+                ? "儲存中…"
+                : "儲存憑證"}</Button
+            >
+          </div>
         {/if}
       </div>
     </form>
@@ -1747,6 +1795,8 @@
                     ? "兆豐同步直接使用 App API，以一般帳密登入並辨識五位數圖形驗證碼；也可改用人工輸入。"
                     : connectorId === "rakuten"
                       ? "樂天網銀驗證碼會先以 Workers AI 自動辨識，失敗時改由人工輸入；每次同步都重新登入，結束時登出，不保留 session。"
-                      : "輸入完帳號密碼後，請先按「儲存設定」，再按「同步」。"}
+                      : connectorId === "sinopac_securities"
+                        ? "永豐金證券採用 Python Shioaji API 本地主動推送模式。若尚未申請金鑰可點擊「申請 API Key」前往永豐官網申請；填入 API Key 與 Secret Key 儲存後，即可使用 Python 腳本將庫存與損益推送到系統。"
+                        : "輸入完帳號密碼後，請先按「儲存設定」，再按「同步」。"}
   </p>
 </Card>

@@ -448,3 +448,12 @@ Migration `0043_merge_legacy_invoice_duplicates.sql` 以相同發票號碼整併
 ## 將來銀行
 
 使用網銀帳密，直接呼叫網銀內部 Web API 登入與查詢；圖形驗證碼支援 AI 自動辨識或人工輸入。單次登入、查詢後登出，不接管其他工作階段。主帳戶查詢最近三個月，活存口袋讀取所有分頁後依日期篩選；定存口袋同步餘額，基金與美股未接入。排程預設停用。設定 CAS 與原子寫入 guard 防止查詢期間變更帳密後仍寫入舊結果。
+
+## 永豐金證券 (Shioaji)
+
+採用外部 Python Shioaji SDK 採集＋安全 REST 端點推送模式（`api_credentials`）。
+
+- 連接器設定包含 `apiKey`（API Key）與 `secretKey`（Secret Key），前端設定頁面提供永豐官方金鑰線上申請連結。
+- 本地 Python 腳本（位於 `scripts/shioaji-sync/`）透過 Shioaji SDK 登入並取得持倉、損益、現價與交割銀行餘額，以規格化 JSON Payload 呼叫 Worker 端點 `POST /api/connectors/sinopac_securities/push`。
+- Worker 端點驗證推送請求中的 `X-Secret-Key`（或 Bearer Token）與後台設定之 `secretKey` 是否相符，通過後透過 `persistStagedSyncWrite` 將投資部位與交割銀行帳戶餘額持久化至 D1 資料庫中。
+- 後端排程檢查僅檢驗最後推送狀態與筆數，不發起主動連線。
