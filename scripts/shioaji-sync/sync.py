@@ -149,7 +149,12 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
         broker_id = getattr(acc, "broker_id", "")
         print(f"  -> 查詢證券帳號 [{broker_id}-{acc_id}] 部位...")
         try:
-            stock_positions = api.list_positions(acc)
+            # 優先使用股數 (Share) 作為單位，確保整股與零股皆以實際股數精確計算市值
+            unit_param = getattr(getattr(sj, "Unit", None), "Share", None)
+            if unit_param:
+                stock_positions = api.list_positions(acc, unit=unit_param)
+            else:
+                stock_positions = api.list_positions(acc)
         except Exception as e:
             print(f"     查詢 [{broker_id}-{acc_id}] 部位跳過: {e}")
             continue
@@ -170,9 +175,12 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
             asset_type = "etf" if symbol.startswith("00") else "stock"
 
             name = symbol
-            contract = api.Contracts.Stocks.get(symbol)
-            if contract and hasattr(contract, "name"):
-                name = contract.name
+            try:
+                contract = api.Contracts.Stocks.get(symbol)
+                if contract and hasattr(contract, "name") and contract.name:
+                    name = contract.name
+            except Exception:
+                pass
 
             positions.append(
                 {
@@ -219,6 +227,7 @@ def push_to_worker(args, payload: Dict[str, Any]):
     base_url = args.target_url.rstrip("/")
     push_endpoint = f"{base_url}/api/connectors/sinopac_securities/push"
 
+    headers: Dict[str, str] = {"Content-Type": "application/json"}
     token = args.token or args.secret_key
     if token:
         headers["Authorization"] = f"Bearer {token}"

@@ -29,7 +29,7 @@ export const shioajiPositionSchema = z.object({
   currentPrice: z.number().optional(),
   unrealizedProfit: z.number().optional(),
   assetType: z.enum(["stock", "etf", "fund"]).default("stock"),
-  currency: z.string().default("TWD"),
+  currency: z.string().optional().default("TWD"),
 });
 
 export type ShioajiPosition = z.infer<typeof shioajiPositionSchema>;
@@ -51,15 +51,15 @@ export type ShioajiTransaction = z.infer<typeof shioajiTransactionSchema>;
 export const shioajiAccountSchema = z.object({
   brokerAccount: z.string().optional(),
   cashBalance: z.number().optional(),
-  currency: z.string().default("TWD"),
+  currency: z.string().optional().default("TWD"),
 });
 
 export type ShioajiAccount = z.infer<typeof shioajiAccountSchema>;
 
 export const shioajiPushPayloadSchema = z.object({
   asOfDate: z.string().optional(), // YYYY-MM-DD
-  positions: z.array(shioajiPositionSchema).default([]),
-  transactions: z.array(shioajiTransactionSchema).optional().default([]),
+  positions: z.array(shioajiPositionSchema).optional().default([]),
+  transactions: z.array(shioajiTransactionSchema).optional(),
   account: shioajiAccountSchema.optional(),
 });
 
