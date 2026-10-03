@@ -6,6 +6,7 @@ import {
   handleShioajiPush,
   syncSinopacSecurities,
 } from "../../../src/sources/sinopac-securities/sync";
+import { withManualSyncLock } from "../../../src/features/sync/manual-sync";
 import type { ShioajiPushPayload } from "../../../src/sources/sinopac-securities/protocol";
 
 const key = "test-encryption-key-sinopac-32b";
@@ -86,8 +87,13 @@ describe("永豐金證券 Shioaji 推送與帳務持久化", () => {
     expect(posRow?.market_value).toBe(30390);
     expect(posRow?.asset_type).toBe("etf");
 
-    // 6. 驗證 syncSinopacSecurities 正確讀取最近推送筆數
-    const syncOutcome = await syncSinopacSecurities(env, "manual");
+    // 6. 驗證 syncSinopacSecurities 與 withManualSyncLock 能正常運作
+    const syncOutcome = await withManualSyncLock(
+      env,
+      "sinopac_securities",
+      "all",
+      () => syncSinopacSecurities(env, "manual"),
+    );
     expect(syncOutcome.success).toBe(true);
     expect(syncOutcome.records).toBe(1);
   });
