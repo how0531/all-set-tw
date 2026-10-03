@@ -180,9 +180,11 @@ def fetch_shioaji_positions(args) -> Dict[str, Any]:
 
             name = symbol
             try:
-                contract = api.Contracts.Stocks.get(symbol)
-                if contract and hasattr(contract, "name") and contract.name:
-                    name = contract.name
+                stocks = getattr(api, "contracts", None) or getattr(api, "Contracts", None)
+                if stocks and hasattr(stocks, "Stocks"):
+                    contract = stocks.Stocks.get(symbol)
+                    if contract and hasattr(contract, "name") and contract.name:
+                        name = contract.name
             except Exception:
                 pass
 
