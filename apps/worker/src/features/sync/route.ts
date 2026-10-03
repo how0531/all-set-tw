@@ -294,6 +294,15 @@ function registerSyncRoutes(api: Hono<AppBindings>) {
     );
   });
 
+  api.post("/connectors/sinopac_securities/sync", async (c) => {
+    return syncRouteResponse(
+      c,
+      withManualSyncLock(c.env, "sinopac_securities", SYNC_SCOPE_ALL, () =>
+        runConnectorSync(c.env, "sinopac_securities", "manual"),
+      ),
+    );
+  });
+
   api.post("/connectors/sinopac/captcha", async (c) => {
     try {
       return c.json(await prepareConnectorChallenge(c.env, "sinopac"));

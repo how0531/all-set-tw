@@ -30,6 +30,11 @@ describe("永豐金證券 Shioaji 推送與帳務持久化", () => {
       secretKey,
     });
 
+    // 尚未推送前執行同步應拋出 NeedsUserActionError 提示
+    await expect(syncSinopacSecurities(env, "manual")).rejects.toThrow(
+      "永豐金證券採用 Python Shioaji API 本地主動推送模式",
+    );
+
     // 2. 準備實測資料 Payload
     const payload: ShioajiPushPayload = {
       asOfDate: "2026-10-04",

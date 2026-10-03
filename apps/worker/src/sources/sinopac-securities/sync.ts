@@ -21,6 +21,7 @@ import {
   parseSinopacSecuritiesConfig,
   type ShioajiPushPayload,
 } from "./protocol";
+import { NeedsUserActionError } from "../../features/sync/errors";
 
 export async function syncSinopacSecurities(
   env: Env,
@@ -46,8 +47,14 @@ export async function syncSinopacSecurities(
     }
   }
 
+  if (!lastPushedAt) {
+    throw new NeedsUserActionError(
+      "永豐金證券採用 Python Shioaji API 本地主動推送模式。請在本地執行 sync.py 腳本將持倉損益推送到系統。",
+    );
+  }
+
   console.log(
-    `[sync] ${connectorId}: push-mode check. Last push: ${lastPushedAt ?? "never"} (${pushedItemsCount} items)`,
+    `[sync] ${connectorId}: push-mode check. Last push: ${lastPushedAt} (${pushedItemsCount} items)`,
   );
 
   return {
